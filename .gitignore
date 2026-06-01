@@ -1,0 +1,9 @@
+# Ignore the virtual environment
+.venv/
+__pycache__/
+
+# Ignore the massive data files
+*.csv
+
+# Ignore local environmental keys and data
+.env
