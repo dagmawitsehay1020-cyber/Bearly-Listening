@@ -1,4 +1,4 @@
-python-telegram-bot==21.1.1
+python-telegram-bot[webhooks]
 pandas==2.2.2
 pyarrow==16.1.0
 numpy==1.26.4
