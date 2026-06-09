@@ -7,3 +7,5 @@ __pycache__/
 
 # Ignore local environmental keys and data
 .env
+
+tracks_features.parquet
