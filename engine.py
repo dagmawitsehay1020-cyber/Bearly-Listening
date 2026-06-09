@@ -2,7 +2,6 @@ import os
 import json
 import pandas as pd
 import numpy as np
-import IPython
 from thefuzz import process
 from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
@@ -291,8 +290,6 @@ def run_interaction_loop(master_songs_list, master_df, history_file_path):
     current_mode = "browse"
     
     while True:
-        IPython.display.clear_output(wait=True)
-
         if current_mode == 'browse':
             print("🎵 --- BASE ONBOARDING TRACK CATALOG ---")
             get_ui_song_list(active_view_tracks, current_page)
@@ -313,7 +310,6 @@ def run_interaction_loop(master_songs_list, master_df, history_file_path):
             user_input = input("📝 Enter item # to rate, 'search', 'next'/'prev', 'list', 'restart' or 'done': ").lower().strip()
 
         if user_input == 'search':
-            IPython.display.clear_output(wait=True)
             search_results = flexible_two_input_search(master_df)
             if search_results:
                 active_view_tracks = search_results
@@ -383,8 +379,6 @@ def run_interaction_loop(master_songs_list, master_df, history_file_path):
         elif user_input == 'done':
             if not user_selections:
                 break
-
-            IPython.display.clear_output(wait=True)
             
             # --- 1. CALCULATE TASTE SPECTRUM ---
             features = ['danceability', 'energy', 'loudness', 'speechiness', 'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo']
@@ -425,7 +419,6 @@ def run_interaction_loop(master_songs_list, master_df, history_file_path):
             input("\n✨ Vibe diagnostics complete. Press Enter to select geographic filters...")
 
             # --- 4. GEOGRAPHIC FILTERS ---
-            IPython.display.clear_output(wait=True)
             print("🌐 --- RECOMMENDATION GEOGRAPHIC FILTER ---")
             available_regions = sorted([str(r) for r in master_df['region_1'].unique() if pd.notna(r) and r != "Global"])
             
