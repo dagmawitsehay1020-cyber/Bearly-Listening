@@ -1,6 +1,7 @@
 # Ignore the virtual environment
 .venv/
 __pycache__/
+*.pyc
 
 # Ignore the massive data files
 *.csv
