@@ -1,25 +1,12 @@
-import logging
-import os
-import pandas as pd
+import logging, os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from engine import engine # Import the memory-efficient engine instance
 
-from engine import init_search_engine, flexible_two_input_search, calculate_taste_vector, generate_geo_recommendations
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-
-print("凉 Loading pre-baked music matrix chunks...")
-try:
-    df_part1 = pd.read_parquet('tracks_features_part1.parquet')
-    df_part2 = pd.read_parquet('tracks_features_part2.parquet')
-    df = pd.concat([df_part1, df_part2], ignore_index=True)
-    print(f"✅ Reassembled music matrix successfully. Total rows: {len(df):,}")
-except Exception as e:
-    print(f"❌ Error loading chunks: {e}")
-    df = pd.read_parquet('tracks_features.parquet')
-
+# Calculate counts using the engine's optimized method
+raw_counts = engine.get_geo_counts()
 GEO_GROUPS = {
     "african": ["African", "Caribbean"],
     "european": ["UK", "Baltic / Europe", "Scandinavian", "German", "Spanish", "French", "Italian", "Dutch", "Irish", "Scottish", "Portuguese", "Romanian", "Polish", "Austrian", "Belgian"],
@@ -27,101 +14,52 @@ GEO_GROUPS = {
     "anglo_americas": ["Canadian", "Australian"],
     "global": ["Global"]
 }
-
-print("📊 Pre-calculating geographical cluster volumes...")
-all_regions_series = pd.concat([df['region_1'], df['region_2'], df['region_3']]).dropna()
-raw_counts = all_regions_series.value_counts().to_dict()
-
-CLUSTER_COUNTS = {
-    "global": sum(raw_counts.get(r, 0) for r in GEO_GROUPS["global"]),
-    "african": sum(raw_counts.get(r, 0) for r in GEO_GROUPS["african"]),
-    "european": sum(raw_counts.get(r, 0) for r in GEO_GROUPS["european"]),
-    "asian": sum(raw_counts.get(r, 0) for r in GEO_GROUPS["asian"]),
-    "anglo_americas": sum(raw_counts.get(r, 0) for r in GEO_GROUPS["anglo_americas"]),
-}
-
-init_search_engine(df)
-print("🚀 Music search engine successfully armed and cached in memory.")
+CLUSTER_COUNTS = {k: sum(raw_counts.get(r, 0) for r in v) for k, v in GEO_GROUPS.items()}
 
 USER_STATES = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sample_tracks = engine._get_data(columns=['name', 'clean_artists']).sample(n=50).values.tolist()
     user_id = update.effective_chat.id
-    sample_tracks = df.sample(n=50)[['name', 'clean_artists']].values.tolist()
-
-    USER_STATES[user_id] = {
-        "current_mode": "browse",
-        "current_page": 0,
-        "track_pool": sample_tracks,
-        "user_selections": []
-    }
-
+    USER_STATES[user_id] = {"current_page": 0, "track_pool": sample_tracks, "user_selections": []}
+    
     msg_text, reply_markup = generate_page_keyboard(sample_tracks, 0)
-    total_tracks = len(df)
-
-    welcome_text = (
-        f"🎵 *Welcome to Bearly Listening Bot!*\n\n"
-        f"Connected successfully to the music matrix containing {total_tracks:,} songs.\n"
-        "Ready to begin calibration. Use `/search` to look up a track.\n\n"
-    )
-
-    await update.message.reply_text(
-        text=welcome_text + msg_text,
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text(f"🎵 *Welcome to Bearly Listening!*\n" + msg_text, reply_markup=reply_markup, parse_mode="Markdown")
 
 def generate_page_keyboard(song_list, current_page):
     start_index = current_page * 10
     end_index = min(start_index + 10, len(song_list))
     page_tracks = song_list[start_index:end_index]
-
-    text_line = ["🎵 *Bearly Listening Track Catalogue* \n"]
+    text_line = ["🎵 *Track Catalogue* \n"]
     for index, song in enumerate(page_tracks, start=start_index + 1):
         text_line.append(f"`[{index}]` *{song[0]}* by {song[1]}")
-        
     text_line.append(f"\n📑 *Page {current_page + 1} of {((len(song_list)-1)//10)+1}*")
-    message_text = "\n".join(text_line)
-
+    
     keyboard = []
     selection_row = []
-
     for i in range(start_index + 1, end_index + 1):
-        btn = InlineKeyboardButton(text=f"{i}", callback_data=f"rate_{i}")
-        selection_row.append(btn)
+        selection_row.append(InlineKeyboardButton(text=f"{i}", callback_data=f"rate_{i}"))
         if len(selection_row) == 5:
-            keyboard.append(selection_row)
-            selection_row = []
-    if selection_row:
-        keyboard.append(selection_row)
-
-    nav_row = [
+            keyboard.append(selection_row); selection_row = []
+    if selection_row: keyboard.append(selection_row)
+    
+    keyboard.append([
         InlineKeyboardButton(text="⬅️ Prev", callback_data="nav_prev"),
         InlineKeyboardButton(text="Next ➡️", callback_data="nav_next"),
         InlineKeyboardButton(text="Done ✅", callback_data="nav_done")
-    ]
-    keyboard.append(nav_row)
-
-    return message_text, InlineKeyboardMarkup(keyboard)
+    ])
+    return "\n".join(text_line), InlineKeyboardMarkup(keyboard)
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     user_id = query.message.chat.id
+    user_data = USER_STATES.get(user_id)
+    if not user_data: return
     
-    if user_id not in USER_STATES:
-        USER_STATES[user_id] = {
-            "current_mode": "browse",
-            "current_page": 0,
-            "track_pool": df.sample(n=50)[['name', 'clean_artists']].values.tolist(),
-            "user_selections": []
-        }
-        
-    user_data = USER_STATES[user_id]
     action = query.data
-    current_page = user_data.get('current_page', 0)
     track_pool = user_data.get('track_pool', [])
+    current_page = user_data.get('current_page', 0)
 
     if action == 'nav_next':
         max_page = (len(track_pool) - 1) // 10
@@ -139,18 +77,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action == 'nav_done':
         selections = user_data.get('user_selections', [])
         if not selections:
-            catalog_text, catalog_markup = generate_page_keyboard(track_pool, current_page)
-            display_text = f"⚠️ *Please rate at least one track before submitting!*\n\n" + catalog_text
-            await query.edit_message_text(text=display_text, reply_markup=catalog_markup, parse_mode='Markdown')
+            await query.answer("⚠️ Please rate at least one track first!", show_alert=True)
             return
         
-        print("📐 Computing user target calibration vector...")
-        computed_taste_vector = calculate_taste_vector(selections, df)
-        user_data['computed_taste_vector'] = computed_taste_vector
-
-        if 'recommended_playlist' in user_data:
-            del user_data['recommended_playlist']
-
+        user_data['computed_taste_vector'] = engine.calculate_taste_vector(selections)
         await show_dashboard_page_1(query, user_data)
         return
 
@@ -266,7 +196,7 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = " ".join(context.args)
     status_message = await update.message.reply_text(text="⚡ *Scanning the music matrix...*", parse_mode="Markdown")
 
-    search_result = flexible_two_input_search(search_query)
+    search_result = engine.flexible_two_input_search(search_query)
 
     if not search_result:
         await status_message.edit_text(text=f"❌ No tracks found matching *'{search_query}'*. Please try a different variant or spelling!", parse_mode='Markdown')
@@ -350,12 +280,12 @@ async def show_dashboard_page_1(query, user_data):
     )
 
 async def show_dashboard_page_2(query, user_data):
-    computed_taste_vector = user_data.get('computed_taste_vector')
     target_geo = user_data.get('target_geo_region', 'global') 
-    
     if 'recommended_playlist' not in user_data:
-        print(f"📡 Generating recommendations restricted to market sector: {target_geo}")
-        user_data['recommended_playlist'] = generate_geo_recommendations(computed_taste_vector, df, region=target_geo)
+        # FIX: Call engine directly
+        user_data['recommended_playlist'] = engine.generate_geo_recommendations(
+            user_data['computed_taste_vector'], region=target_geo
+        )
 
     recommended_playlist = user_data['recommended_playlist']
     
@@ -414,14 +344,7 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main() -> None:
     TOKEN = "8881709053:AAHmf9l2cb96Go0TtC3tr8WIrszvGWV9_sE"
-    
-    application = (
-        Application.builder()
-        .token(TOKEN)
-        .connect_timeout(30.0)
-        .read_timeout(30.0)
-        .build()
-    )
+    application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("search", search_command))
@@ -429,21 +352,15 @@ def main() -> None:
     application.add_handler(CommandHandler("about", about_command))
     application.add_handler(CommandHandler("info", info_command))
     
-    RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
-    
-    if RENDER_EXTERNAL_URL:
+    # Use Webhook if on Render, else Polling
+    if "RENDER_EXTERNAL_URL" in os.environ:
         PORT = int(os.environ.get("PORT", 8000))
-        print(f"🌐 Operating in Webhook mode on port {PORT}...")
-        
         application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=TOKEN, 
-            webhook_url=f"{RENDER_EXTERNAL_URL}/{TOKEN}"
+            listen="0.0.0.0", port=PORT, url_path=TOKEN, 
+            webhook_url=f"{os.environ['RENDER_EXTERNAL_URL']}/{TOKEN}"
         )
     else:
-        print("💻 Operating in Local Polling mode...")
-        application.run_polling(drop_pending_updates=True, bootstrap_retries=5)
+        application.run_polling()
 
 if __name__ == "__main__":
     main()
