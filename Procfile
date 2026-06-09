@@ -1,1 +1,1 @@
-web: python telegram_bot.py
+web: pip install -r requirements.txt && python telegram_bot.py
