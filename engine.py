@@ -466,20 +466,5 @@ def run_interaction_loop(master_songs_list, master_df, history_file_path):
             save_interacted_songs_to_disk(user_selections, history_file_path)
             break
 
-# ==================================================================================================
-# === 4. DATA INITIALIZATION & ENTRYPOINT =========================================================
-# ==================================================================================================
-
-if os.path.exists("tracks_features.parquet"):
-    df = pd.read_parquet("tracks_features.parquet", engine="pyarrow")
-else:
-    df = pd.read_csv('tracks_features.csv')
-    df = df[(df['duration_ms'] >= 60000) & (df['duration_ms'] <= 600000)].drop_duplicates(subset=['name', 'artists'])
-    df['clean_artists'] = df['artists'].str.replace(r"[\[\]']", "", regex=True)
-    df['search_text'] = df['name'] + " - " + df['clean_artists']
-    df['name_prefix'] = df['name'].str.lower().str[:2]
-    df['artist_prefix'] = df['clean_artists'].str.lower().str[:2]
-
-# Keep this completely empty or delete it so the terminal UI loop doesn't fight the bot
 if __name__ == "__main__":
     print("Engine module loaded successfully.")
