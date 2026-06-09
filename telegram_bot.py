@@ -394,6 +394,24 @@ async def show_dashboard_page_2(query, user_data):
         parse_mode='Markdown'
     )
 
+async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    about_text = (
+        "🐻 **About Bearly-Listening**\n\nBearly-Listening is an experimental backend project focused on building custom recommendation algorithms from scratch. Currently in **Beta v0.1**, this bot serves as a live environment for stress-testing data retrieval and vector-matching logic.\n\n The goal of this project is to move beyond standard API reliance and develop a more nuanced, autonomous recommendation engine."
+    )
+    await update.message.reply_text(about_text, parse_mode='Markdown')
+
+async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    info_text = (
+        "⚙️ **Technical Specifications & Status**\n\n"
+        "• 🎵 **Database:** Currently optimized with **1.08 million local songs**.\n"
+        "• 🚧 **API Status:** Beta. Not yet hooked to external APIs (e.g., Spotify/Apple Music).\n"
+        "• 🧠 **Recommendation Engine:** Uses **Taste Vector Analysis**.\n"
+        "   1. Requests are mapped to a 'Taste Vector' in high-dimensional space.\n"
+        "   2. The engine calculates spatial distances to find the best match.\n\n"
+        "• 📉 **Limitations:** As a learning project, I may occasionally provide unexpected results. Your feedback is crucial for my training!"
+    )
+    await update.message.reply_text(info_text, parse_mode='Markdown')
+
 def main() -> None:
     TOKEN = "8881709053:AAHmf9l2cb96Go0TtC3tr8WIrszvGWV9_sE"
     
@@ -408,6 +426,8 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(CommandHandler("about", about_command))
+    application.add_handler(CommandHandler("info", info_command))
     
     RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
     
