@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: bearly-listening
+    runtime: python
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "python telegram_bot.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DISABLE_POETRY
+        value: "1"
